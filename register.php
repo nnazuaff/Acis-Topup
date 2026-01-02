@@ -4,6 +4,11 @@ require_once __DIR__ . '/app/bootstrap.php';
 
 auth_session_start();
 
+// Prevent proxy/browser caching (cached HTML can cause stale CSRF tokens)
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 $next = trim((string)($_GET['next'] ?? ''));
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
   $params0 = read_body_params();
@@ -34,6 +39,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $params = read_body_params();
     $token = (string)($params['_csrf'] ?? '');
     if (!csrf_verify($token)) {
+    append_log('logs/auth.log', '[' . now_mysql() . '] REGISTER_CSRF_FAIL host=' . (string)($_SERVER['HTTP_HOST'] ?? '-') . ' ip=' . (string)($_SERVER['REMOTE_ADDR'] ?? '-') . ' sid=' . session_id() . ' has_cookie=' . (isset($_COOKIE[session_name()]) ? '1' : '0'));
         $error = 'CSRF token tidak valid. Refresh halaman.';
     } else {
         $email = (string)($params['email'] ?? '');
