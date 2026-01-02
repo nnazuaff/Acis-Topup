@@ -2,11 +2,10 @@
 
 require_once __DIR__ . '/app/bootstrap.php';
 
-auth_require_login_page();
 auth_session_start();
 
 $csrf = csrf_token();
-$games = require __DIR__ . '/app/config/games.php';
+$isLoggedIn = auth_current_user_id() !== null;
 ?>
 <!doctype html>
 <html lang="id">
@@ -31,21 +30,61 @@ $games = require __DIR__ . '/app/config/games.php';
       <h1 style="margin:0">Topup Games</h1>
       <div class="muted">Pilih game untuk mulai topup.</div>
     </div>
-    <form method="post" action="logout.php" style="margin:0">
-      <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES); ?>" />
-      <button type="submit">Logout</button>
-    </form>
+    <?php if ($isLoggedIn): ?>
+      <form method="post" action="logout.php" style="margin:0">
+        <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES); ?>" />
+        <button type="submit">Logout</button>
+      </form>
+    <?php else: ?>
+      <a href="login.php?next=<?php echo urlencode('index.php'); ?>" style="text-decoration:none">
+        <button type="button">Login</button>
+      </a>
+    <?php endif; ?>
   </div>
 
-  <div class="grid" style="margin-top:18px">
-    <?php foreach ($games as $g): ?>
-      <a class="card" href="order.php?game=<?php echo urlencode((string)($g['key'] ?? '')); ?>">
-        <div class="box">
-          <div style="font-weight:600"><?php echo htmlspecialchars((string)($g['name'] ?? '-'), ENT_QUOTES); ?></div>
-          <div class="muted" style="margin-top:6px">Klik untuk order</div>
-        </div>
-      </a>
-    <?php endforeach; ?>
+  <div id="games" class="grid" style="margin-top:18px">
+    <div class="box" style="grid-column:1/-1">
+      <div style="font-weight:600">Loading...</div>
+      <div class="muted" style="margin-top:6px">Mengambil daftar Voucher Game.</div>
+    </div>
   </div>
+
+  <script>
+    (async () => {
+      const wrap = document.getElementById('games');
+      try {
+        const res = await fetch('app/api/games_voucher_game.php', { method: 'GET' });
+        const json = await res.json();
+
+        if (!json || !json.ok || !Array.isArray(json.games)) {
+          throw new Error((json && json.error) ? json.error : 'Gagal mengambil data game');
+        }
+
+        wrap.innerHTML = '';
+        for (const g of json.games) {
+          const op = String(g.operator_id || '');
+          const name = String(g.name || op || '-');
+          if (!op) continue;
+
+          const a = document.createElement('a');
+          a.className = 'card';
+          a.href = 'order.php?op=' + encodeURIComponent(op);
+          a.innerHTML = `
+            <div class="box">
+              <div style="font-weight:600">${name}</div>
+              <div class="muted" style="margin-top:6px">${op}</div>
+            </div>
+          `;
+          wrap.appendChild(a);
+        }
+
+        if (!wrap.children.length) {
+          wrap.innerHTML = '<div class="box" style="grid-column:1/-1">Tidak ada game.</div>';
+        }
+      } catch (e) {
+        wrap.innerHTML = `<div class="box" style="grid-column:1/-1"><div style="font-weight:600">Gagal</div><div class="muted" style="margin-top:6px">${String(e.message || e)}</div></div>`;
+      }
+    })();
+  </script>
 </body>
 </html>

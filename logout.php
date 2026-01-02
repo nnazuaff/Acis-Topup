@@ -20,5 +20,5 @@ if (!csrf_verify($token)) {
 
 auth_logout();
 
-header('Location: login.php');
+header('Location: index.php');
 exit;

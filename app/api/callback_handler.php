@@ -51,6 +51,12 @@ $now = now_mysql();
 
 try {
     $pdo = db();
+    $pdo->beginTransaction();
+
+    $tx = $pdo->prepare('SELECT user_id, wallet_debited, wallet_refunded FROM transactions WHERE trx_id = :trx_id FOR UPDATE');
+    $tx->execute([':trx_id' => $trxId]);
+    $row = $tx->fetch();
+
     $stmt = $pdo->prepare('UPDATE transactions SET status = :status, message = :message, updated_at = :updated_at WHERE trx_id = :trx_id');
     $stmt->execute([
         ':status' => $normalized,
@@ -58,7 +64,30 @@ try {
         ':updated_at' => $now,
         ':trx_id' => $trxId,
     ]);
+
+    // Refund wallet if FAILED and not refunded yet
+    if ($normalized === 'FAILED' && is_array($row)) {
+        $uid = (int)($row['user_id'] ?? 0);
+        $debited = (int)($row['wallet_debited'] ?? 0);
+        $refunded = (int)($row['wallet_refunded'] ?? 0);
+        if ($uid > 0 && $debited > 0 && $refunded <= 0) {
+            $pdo->prepare('UPDATE users SET balance = balance + :amt, updated_at = :updated_at WHERE id = :id')
+                ->execute([':amt' => $debited, ':updated_at' => $now, ':id' => $uid]);
+            $pdo->prepare('UPDATE transactions SET wallet_refunded = :amt, updated_at = :updated_at WHERE trx_id = :trx_id')
+                ->execute([':amt' => $debited, ':updated_at' => $now, ':trx_id' => $trxId]);
+        }
+    }
+
+    $pdo->commit();
 } catch (Throwable $e) {
+    try {
+        $pdo = db();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+    } catch (Throwable $ignore) {
+        // ignore
+    }
     append_log('logs/callback.log', '[' . $now . '] DB_ERROR trx_id=' . $trxId . ' err=' . $e->getMessage() . ' raw=' . $raw);
     json_response(['ok' => false, 'error' => 'DB error'], 500);
     exit;

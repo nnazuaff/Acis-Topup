@@ -4,9 +4,28 @@ require_once __DIR__ . '/app/bootstrap.php';
 
 auth_session_start();
 
+$next = trim((string)($_GET['next'] ?? ''));
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+  $params0 = read_body_params();
+  $next = trim((string)($params0['next'] ?? $next));
+}
+
+$isSafeNext = static function (string $u): bool {
+  if ($u === '') {
+    return false;
+  }
+  if (str_contains($u, "\r") || str_contains($u, "\n")) {
+    return false;
+  }
+  if (preg_match('#^https?://#i', $u) || str_starts_with($u, '//')) {
+    return false;
+  }
+  return true;
+};
+
 // If already logged in
 if (auth_current_user_id() !== null) {
-    header('Location: index.php');
+  header('Location: ' . ($isSafeNext($next) ? $next : 'index.php'));
     exit;
 }
 
@@ -24,7 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!($res['ok'] ?? false)) {
             $error = (string)($res['error'] ?? 'Login gagal');
         } else {
-            header('Location: index.php');
+          header('Location: ' . ($isSafeNext($next) ? $next : 'index.php'));
             exit;
         }
     }
@@ -54,6 +73,7 @@ $csrf = csrf_token();
   <div class="box">
     <form method="post">
       <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES); ?>" />
+      <input type="hidden" name="next" value="<?php echo htmlspecialchars($next, ENT_QUOTES); ?>" />
 
       <label>Email / Username</label>
       <input name="login" autocomplete="username" required />
