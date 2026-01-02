@@ -106,6 +106,34 @@ function csrf_verify_header_or_fail(): void
     }
 }
 
+function auth_db_error_hint(Throwable $e): string
+{
+    $msg = $e->getMessage();
+    $upper = strtoupper($msg);
+
+    // Common MySQL errors we can give actionable steps for
+    if (str_contains($upper, 'SQLSTATE[42S02]') || str_contains($upper, 'BASE TABLE') || str_contains($upper, 'DOESN\'T EXIST')) {
+        if (preg_match('/\bUSERS\b/i', $msg)) {
+            return 'Tabel users belum ada. Jalankan app/schema_update_2026_01_02.sql atau app/schema.sql di database.';
+        }
+        return 'Tabel database belum lengkap. Pastikan schema sudah di-import.';
+    }
+
+    if (str_contains($upper, 'ACCESS DENIED') || str_contains($upper, 'SQLSTATE[28000]')) {
+        return 'Akses DB ditolak. Cek username/password di app/config/database.php.';
+    }
+
+    if (str_contains($upper, 'UNKNOWN DATABASE') || str_contains($upper, 'SQLSTATE[HY000]') && str_contains($upper, '1049')) {
+        return 'Database tidak ditemukan. Cek dbname di app/config/database.php.';
+    }
+
+    if (str_contains($upper, 'CONNECTION') || str_contains($upper, 'SQLSTATE[HY000]') && (str_contains($upper, '2002') || str_contains($upper, '2006'))) {
+        return 'Koneksi DB gagal. Cek host/port DB dan pastikan MySQL aktif.';
+    }
+
+    return 'DB error.';
+}
+
 function auth_register_user(string $email, string $username, string $password): array
 {
     $email = strtolower(trim($email));
@@ -140,11 +168,12 @@ function auth_register_user(string $email, string $username, string $password): 
         ]);
         return ['ok' => true, 'user_id' => (int)$pdo->lastInsertId()];
     } catch (Throwable $e) {
+        append_log('logs/auth.log', '[' . now_mysql() . '] REGISTER_DB_ERROR ' . $e->getMessage());
         // Duplicate key
         if (stripos($e->getMessage(), 'uniq_email') !== false || stripos($e->getMessage(), 'Duplicate') !== false) {
             return ['ok' => false, 'error' => 'Email/Username sudah terdaftar'];
         }
-        return ['ok' => false, 'error' => 'DB error'];
+        return ['ok' => false, 'error' => auth_db_error_hint($e)];
     }
 }
 
@@ -179,7 +208,8 @@ function auth_login(string $emailOrUsername, string $password): array
 
         return ['ok' => true, 'user_id' => (int)$row['id']];
     } catch (Throwable $e) {
-        return ['ok' => false, 'error' => 'DB error'];
+        append_log('logs/auth.log', '[' . now_mysql() . '] LOGIN_DB_ERROR ' . $e->getMessage());
+        return ['ok' => false, 'error' => auth_db_error_hint($e)];
     }
 }
 
