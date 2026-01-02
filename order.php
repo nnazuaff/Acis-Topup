@@ -160,6 +160,10 @@ $next = 'order.php?op=' . urlencode($operatorId);
       const json = await res.json().catch(() => ({}));
       result.textContent = JSON.stringify(json, null, 2);
 
+      if (res.status === 419 && json && json.error && String(json.error).toLowerCase().includes('csrf')) {
+        result.textContent += '\n\nCSRF token tidak valid. Silakan reload halaman lalu coba lagi.';
+      }
+
       if (json && json.ok && json.trx_id) {
         const url = 'status.php?trx_id=' + encodeURIComponent(json.trx_id);
         result.textContent += '\n\nBuka status realtime: ' + location.origin + '/' + url;

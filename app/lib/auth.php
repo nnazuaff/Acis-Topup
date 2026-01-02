@@ -16,11 +16,36 @@ function auth_session_start(): void
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443);
 
+    $cookieDomain = '';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+    // Strip port
+    if ($host !== '' && str_contains($host, ':')) {
+        $host = explode(':', $host, 2)[0];
+    }
+
+    // If host is a domain name, share cookie across subdomains (helps avoid CSRF mismatch
+    // when user accesses via different hostnames like www/non-www/subdomain).
+    if ($host !== '' && filter_var($host, FILTER_VALIDATE_IP) === false && $host !== 'localhost') {
+        $parts = array_values(array_filter(explode('.', $host), static fn($p) => $p !== ''));
+        $n = count($parts);
+        if ($n >= 2) {
+            $last2 = $parts[$n - 2] . '.' . $parts[$n - 1];
+            $last3 = $n >= 3 ? ($parts[$n - 3] . '.' . $last2) : $last2;
+
+            // Basic heuristic for common multi-part TLDs
+            if (preg_match('/\b(co\.id|ac\.id|sch\.id|go\.id)\b/i', $last2)) {
+                $cookieDomain = '.' . $last3;
+            } else {
+                $cookieDomain = '.' . $last2;
+            }
+        }
+    }
+
     // PHP 7.3+ supports samesite via array; older versions ignore unknown keys
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
-        'domain' => '',
+        'domain' => $cookieDomain,
         'secure' => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
