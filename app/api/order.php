@@ -4,6 +4,9 @@ require_once __DIR__ . '/../bootstrap.php';
 
 require_method('POST');
 
+auth_require_login_api();
+csrf_verify_header_or_fail();
+
 $params = read_body_params();
 
 $productCode = trim((string)($params['product_code'] ?? ''));
@@ -17,14 +20,16 @@ if ($productCode === '' || $target === '') {
 
 $trxId = gen_trx_id();
 $now = now_mysql();
+$userId = auth_current_user_id();
 
 try {
     $pdo = db();
     $stmt = $pdo->prepare(
-        'INSERT INTO transactions (trx_id, product_code, target, price, status, message, created_at, updated_at)
-         VALUES (:trx_id, :product_code, :target, :price, :status, :message, :created_at, :updated_at)'
+        'INSERT INTO transactions (user_id, trx_id, product_code, target, price, status, message, created_at, updated_at)
+         VALUES (:user_id, :trx_id, :product_code, :target, :price, :status, :message, :created_at, :updated_at)'
     );
     $stmt->execute([
+        ':user_id' => $userId,
         ':trx_id' => $trxId,
         ':product_code' => $productCode,
         ':target' => $target,
