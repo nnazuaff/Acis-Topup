@@ -1,0 +1,5 @@
+RewriteEngine On
+
+# Serpul biasanya mengecek URL callback tanpa ekstensi.
+# Map /callback atau /callback/ -> /callback.php
+RewriteRule ^callback/?$ callback.php [L]
