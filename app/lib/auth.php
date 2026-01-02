@@ -186,8 +186,12 @@ function auth_login(string $emailOrUsername, string $password): array
 
     try {
         $pdo = db();
-        $stmt = $pdo->prepare('SELECT id, email, username, password_hash FROM users WHERE email = :login OR username = :login LIMIT 1');
-        $stmt->execute([':login' => strtolower($login)]);
+        // PDO MySQL (native prepares) can error if the same named placeholder is reused.
+        $stmt = $pdo->prepare('SELECT id, email, username, password_hash FROM users WHERE email = :email OR username = :username LIMIT 1');
+        $stmt->execute([
+            ':email' => strtolower($login),
+            ':username' => $login,
+        ]);
         $row = $stmt->fetch();
         if (!is_array($row)) {
             return ['ok' => false, 'error' => 'Login gagal'];
